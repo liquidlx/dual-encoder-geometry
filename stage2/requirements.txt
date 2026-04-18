@@ -1,12 +1,15 @@
-# PyTorch — install separately with CUDA support
+# PyTorch -- install separately with CUDA support
 # See: https://pytorch.org/get-started/locally/
 #
-# CUDA 11.8 (RTX 2060 / GTX 10xx / RTX 20xx):
+# CUDA 11.8 (RTX 20xx / GTX 10xx):
 #   pip install torch --index-url https://download.pytorch.org/whl/cu118
 #
-# CUDA 12.1 (RTX 30xx / RTX 40xx):
+# CUDA 12.1 (RTX 30xx / 40xx):
 #   pip install torch --index-url https://download.pytorch.org/whl/cu121
 #
 # CPU only:
 #   pip install torch
 torch>=2.1.0
+
+# Tiktoken -- OpenAI's fast BPE tokenizer (cl100k_base, same as GPT-4)
+tiktoken>=0.7.0

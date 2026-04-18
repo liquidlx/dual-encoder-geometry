@@ -1,11 +1,9 @@
 """
-prepare.py -- Download HumanEval + MBPP and train BPE tokenizer on the corpus.
+prepare.py -- Download HumanEval + MBPP and write tokenizer metadata.
 
-Each example is structured as:
-  instruction : function docstring (what should be done)
-  context     : function signature + surrounding code (what already exists)
-  target      : function body (what the model must generate)
-  tests       : list of assert statements for pass@k evaluation
+With tiktoken there is no training step -- the tokenizer is pretrained.
+This script only downloads the datasets and writes a vocab.json metadata file
+so the rest of the codebase knows which tokenizer is in use.
 """
 
 import json
@@ -97,8 +95,8 @@ def split(examples, val_ratio=0.1, test_ratio=0.1, seed=42):
     n_val = max(1, int(n * val_ratio))
     return {
         "train": data[:n - n_val - n_test],
-        "val": data[n - n_val - n_test:n - n_test],
-        "test": data[n - n_test:],
+        "val":   data[n - n_val - n_test:n - n_test],
+        "test":  data[n - n_test:],
     }
 
 
@@ -132,44 +130,40 @@ def main():
                 f.write(json.dumps(ex, ensure_ascii=False) + "\n")
         print(f"  {name}: {len(data)} -> {path}")
 
-    # Train BPE tokenizer on training corpus
-    from models.tokenizer import BPETokenizer
-    train_texts = []
-    for ex in splits["train"]:
-        train_texts.append(ex["instruction"])
-        train_texts.append(ex["context"])
-        train_texts.append(ex["target"])
-
-    tokenizer = BPETokenizer.train(train_texts, vocab_size=4000, min_freq=2)
+    # Write tokenizer metadata -- tiktoken needs no training
+    from models.tokenizer import TiktokenWrapper, VOCAB_SIZE, PAD_ID, BOS_ID, EOS_ID, SEP_ID
+    tok = TiktokenWrapper()
 
     # Sanity check
     sample = "def add(a, b):\n    return a + b"
-    ids = tokenizer.encode(sample, 64)
-    decoded = tokenizer.decode(ids)
-    print(f"\nBPE sanity check:")
+    ids = tok.encode(sample, 64)
+    decoded = tok.decode(ids)
+    print(f"\nTiktoken sanity check:")
     print(f"  Original: {repr(sample)}")
-    print(f"  Token ids: {[i for i in ids if i != 0][:20]}")
+    print(f"  Token ids (first 10): {[i for i in ids if i != PAD_ID][:10]}")
     print(f"  Decoded:  {repr(decoded)}")
     print(f"  Lossless: {sample.strip() == decoded.strip()}")
 
     vocab_path = OUT_DIR / "vocab.json"
-    tokenizer.save(vocab_path)
-    print(f"  Vocab: {tokenizer.vocab_size} tokens -> {vocab_path}")
+    tok.save(vocab_path)
+    print(f"  Tokenizer: tiktoken ({VOCAB_SIZE} tokens) -> {vocab_path}")
 
     stats_path = OUT_DIR / "stats.json"
     with open(stats_path, "w") as f:
         json.dump({
             "total": len(examples),
             "splits": {k: len(v) for k, v in splits.items()},
-            "vocab_size": tokenizer.vocab_size,
-            "tokenizer": "bpe",
+            "vocab_size": VOCAB_SIZE,
+            "tokenizer": "tiktoken_cl100k_base",
             "sources": {
                 "humaneval": len([e for e in examples if e["source"] == "humaneval"]),
-                "mbpp": len([e for e in examples if e["source"] == "mbpp"]),
+                "mbpp":      len([e for e in examples if e["source"] == "mbpp"]),
             }
         }, f, indent=2)
 
-    print("\nDone. Next: python3 train.py --model baseline --epochs 30 --batch_size 8")
+    print("\nDone. Next:")
+    print("  python3 train.py --model baseline --epochs 60 --batch_size 8")
+    print("  python3 train.py --model dual     --epochs 60 --batch_size 8")
 
 
 if __name__ == "__main__":
