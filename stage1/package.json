@@ -1,0 +1,19 @@
+{
+  "name": "stage1-embedding-geometry",
+  "version": "1.0.0",
+  "description": "Stage 1 -- Geometric analysis of instruction vs data embeddings using Voyage AI",
+  "main": "dist/analyze.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/analyze.js",
+    "dev": "tsx src/analyze.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.52.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.8.3",
+    "@types/node": "^22.14.0"
+  }
+}

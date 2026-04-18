@@ -2,37 +2,33 @@
 __pycache__/
 *.py[cod]
 *.pyo
-*.pyd
-.Python
-*.egg
-*.egg-info/
-dist/
-build/
-.eggs/
 .venv/
 venv/
-env/
 
-# PyTorch checkpoints — large binary files
-checkpoints/baseline/
-checkpoints/dual/
+# PyTorch checkpoints
+stage2/checkpoints/baseline/
+stage2/checkpoints/dual/
 *.pt
 *.pth
-*.ckpt
 
-# Generated data — reproducible via prepare.py
-data/train.jsonl
-data/val.jsonl
-data/test.jsonl
-data/vocab.json
-data/stats.json
+# Generated data
+stage2/data/train.jsonl
+stage2/data/val.jsonl
+stage2/data/test.jsonl
+stage2/data/vocab.json
+stage2/data/stats.json
 
-# Results — generated via eval.py
-results/eval_results.json
+# Results
+stage2/results/eval_results.json
 
-# Keep placeholder files
-!checkpoints/.gitkeep
-!results/.gitkeep
+# Keep placeholders
+!stage2/checkpoints/.gitkeep
+!stage2/results/.gitkeep
+
+# Node
+stage1/node_modules/
+stage1/dist/
+stage1/output/
 
 # OS
 .DS_Store
@@ -42,13 +38,3 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
-*.swo
-
-# Jupyter
-.ipynb_checkpoints/
-*.ipynb
-
-# Logs
-*.log
-wandb/
-runs/

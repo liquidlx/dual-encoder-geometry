@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+env/
+
+# PyTorch checkpoints — large binary files
+checkpoints/baseline/
+checkpoints/dual/
+*.pt
+*.pth
+*.ckpt
+
+# Generated data — reproducible via prepare.py
+data/train.jsonl
+data/val.jsonl
+data/test.jsonl
+data/vocab.json
+data/stats.json
+
+# Results — generated via eval.py
+results/eval_results.json
+
+# Keep placeholder files
+!checkpoints/.gitkeep
+!results/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Logs
+*.log
+wandb/
+runs/
