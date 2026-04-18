@@ -20,7 +20,7 @@ from torch.utils.data import DataLoader
 ROOT = Path(__file__).parent
 sys.path.insert(0, str(ROOT))
 
-from models.tokenizer import BPETokenizer, CodeDataset
+from models.tokenizer import TiktokenWrapper as BPETokenizer, CodeDataset
 from models.baseline import BaselineModel, BaselineConfig
 from models.dual_encoder import DualEncoderModel, DualEncoderConfig
 
@@ -35,6 +35,7 @@ def parse_args():
     p.add_argument("--batch_size", type=int, default=4)
     p.add_argument("--max_new_tokens", type=int, default=128)
     p.add_argument("--geometry", action="store_true", help="Also run geometry analysis")
+    p.add_argument("--sample", type=int, default=0, help="Print N sample generations for debugging")
     return p.parse_args()
 
 
@@ -120,6 +121,7 @@ def evaluate_pass_at_k(
     k: int = 1,
     max_new_tokens: int = 128,
     batch_size: int = 4,
+    n_samples: int = 0,
 ) -> dict:
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn)
 
@@ -151,7 +153,8 @@ def evaluate_pass_at_k(
             # Reconstruct function signature from context_ids
             ctx_ids = batch_tensors["context_ids"][i].tolist()
             ctx = tokenizer.decode(ctx_ids)
-            full_code = f"{ctx}:\n    {gen_text}"
+            ctx_clean = ctx.rstrip(":")
+            full_code = f"{ctx_clean}:\n{gen_text}"
 
             entry_point = batch["entry_point"][i] if isinstance(batch["entry_point"], list) else ""
             tests = batch["tests"][i] if isinstance(batch["tests"], list) else []
@@ -165,10 +168,26 @@ def evaluate_pass_at_k(
                 "id": batch["id"][i] if isinstance(batch["id"], list) else str(i),
                 "generated": gen_text,
                 "passed": ok,
+                "full_code": full_code,
+                "instruction": tokenizer.decode(batch_tensors["instruction_ids"][i].tolist()),
             })
 
     pass_rate = passed / max(total, 1)
     print(f"  pass@{k}: {passed}/{total} = {pass_rate:.3f} ({pass_rate*100:.1f}%)")
+
+    if n_samples > 0:
+        print(f"\n  --- {n_samples} sample generations ---")
+        for r in results[:n_samples]:
+            print(f"\n  [{r['id']}]")
+            print(f"  Instruction: {r['instruction'][:80].strip()!r}")
+            print(f"  Generated body:")
+            for line in r['generated'][:200].split('\n')[:8]:
+                print(f"    {line}")
+            print(f"  Full code sent to tests:")
+            for line in r['full_code'][:300].split('\n')[:10]:
+                print(f"    {line}")
+            print(f"  Passed: {r['passed']}")
+        print(f"  --- end samples ---\n")
 
     return {
         "model": model_type,
@@ -269,7 +288,8 @@ def run_eval(model_type: str, args, device: torch.device, tokenizer: BPETokenize
 
     result = evaluate_pass_at_k(
         model, model_type, test_ds, tokenizer, device,
-        k=args.k, max_new_tokens=args.max_new_tokens, batch_size=args.batch_size
+        k=args.k, max_new_tokens=args.max_new_tokens, batch_size=args.batch_size,
+        n_samples=args.sample,
     )
 
     if args.geometry:

@@ -25,7 +25,7 @@ from torch.utils.data import DataLoader
 ROOT = Path(__file__).parent
 sys.path.insert(0, str(ROOT))
 
-from models.tokenizer import BPETokenizer, CodeDataset
+from models.tokenizer import TiktokenWrapper as BPETokenizer, CodeDataset
 from models.baseline import BaselineModel, BaselineConfig
 from models.dual_encoder import DualEncoderModel, DualEncoderConfig
 
