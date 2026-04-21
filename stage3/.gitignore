@@ -1,0 +1,27 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Checkpoints
+checkpoints/baseline/
+checkpoints/dual/
+*.pt
+*.pth
+
+# Generated data
+data/train.jsonl
+data/val.jsonl
+data/test.jsonl
+data/vocab.json
+data/stats.json
+
+# Results
+results/eval_results.json
+
+# Keep placeholders
+!checkpoints/.gitkeep
+!results/.gitkeep
+
+# HuggingFace cache (large, not needed in repo)
+.cache/

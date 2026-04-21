@@ -1,0 +1,10 @@
+# PyTorch -- install with CUDA support
+# CUDA 11.8 (RTX 20xx):
+#   pip install torch --index-url https://download.pytorch.org/whl/cu118
+torch>=2.1.0
+
+# HuggingFace Transformers -- for CodeT5+ pretrained weights
+transformers>=4.40.0
+
+# SentencePiece -- required by CodeT5+ tokenizer
+sentencepiece>=0.1.99
