@@ -20,13 +20,11 @@ Geometry analysis:
   - But now with pass@1 > 0 because of pretrained Python knowledge
 """
 
-import math
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from copy import deepcopy
 from dataclasses import dataclass
-from transformers import T5ForConditionalGeneration, RobertaTokenizer
+from transformers import T5ForConditionalGeneration
 
 CHECKPOINT = "Salesforce/codet5p-220m-py"
 
@@ -61,6 +59,7 @@ class InstructionContextGate(nn.Module):
                 ),
                 "norm_q":   nn.LayerNorm(config.d_model),
                 "norm_kv":  nn.LayerNorm(config.d_model),
+                "norm_attn": nn.LayerNorm(config.d_model),
                 "norm_out": nn.LayerNorm(config.d_model),
                 "ffn": nn.Sequential(
                     nn.Linear(config.d_model, config.d_model * 4),
@@ -72,7 +71,9 @@ class InstructionContextGate(nn.Module):
             })
             for _ in range(config.n_layers)
         ])
-        # Scalar gate per layer -- sigmoid(0) = 0.5, neutral start
+        self.output_norm = nn.LayerNorm(config.d_model)
+        # Scalar gate per layer in [-1, 1] via tanh.
+        # Starts at 0.0 -> pretrained decoder initially sees pure instruction memory.
         self.gates = nn.Parameter(torch.zeros(config.n_layers))
 
     def forward(
@@ -82,10 +83,11 @@ class InstructionContextGate(nn.Module):
         context_key_padding_mask: torch.Tensor, # (B, L_c) True=ignore
     ) -> tuple[torch.Tensor, list[float]]:
         x = instruction_memory
+        base_rms = instruction_memory.pow(2).mean(dim=-1, keepdim=True).sqrt().clamp(min=1e-6)
         gate_values = []
 
         for i, layer in enumerate(self.layers):
-            gate = torch.sigmoid(self.gates[i])
+            gate = torch.tanh(self.gates[i])
             gate_values.append(gate.item())
 
             q  = layer["norm_q"](x)
@@ -98,9 +100,13 @@ class InstructionContextGate(nn.Module):
                 key_padding_mask=context_key_padding_mask,
             )
 
-            x = x + gate * attn_out
+            x = x + gate * layer["norm_attn"](attn_out)
             x = x + layer["ffn"](layer["norm_out"](x))
 
+        # Keep decoder-facing memory on the same scale as pretrained encoder output.
+        x = self.output_norm(x)
+        out_rms = x.pow(2).mean(dim=-1, keepdim=True).sqrt().clamp(min=1e-6)
+        x = x * (base_rms / out_rms)
         return x, gate_values
 
 
@@ -151,14 +157,15 @@ class DualEncoderCodeT5(nn.Module):
         # gradient points in the direction that amplifies or suppresses the
         # difference -- which is exactly what we want.
         #
-        # std=0.01 is ~1% of typical CodeT5+ weight magnitude.
-        # Small enough to preserve pretrained representations (cosine
-        # similarity between encoders after noise is still ~0.9999).
+        # std=1e-3 is tiny relative to pretrained weight magnitudes.
+        # Small enough to preserve pretrained representations.
         # Large enough to break the symmetry that causes frozen gates.
-        SYMMETRY_BREAK_STD = 0.01
+        SYMMETRY_BREAK_STD = 1e-3
         with torch.no_grad():
             for p in self.context_encoder.parameters():
-                p.add_(torch.randn_like(p) * SYMMETRY_BREAK_STD)
+                # Perturb matrix-shaped weights only; avoid bias/norm drift.
+                if p.ndim >= 2:
+                    p.add_(torch.randn_like(p) * SYMMETRY_BREAK_STD)
 
         # Verify symmetry was broken -- compare a sample of weights
         with torch.no_grad():
@@ -177,6 +184,11 @@ class DualEncoderCodeT5(nn.Module):
         self.shared   = base.shared
         self.config   = base.config
 
+        # Keep encoder token embeddings tied to the pretrained shared table.
+        # This preserves lexical alignment with the pretrained decoder.
+        self.instruction_encoder.set_input_embeddings(self.shared)
+        self.context_encoder.set_input_embeddings(self.shared)
+
         # Gate bridges I and C -- only communication between the two spaces
         d_model = base.config.d_model  # T5/CodeT5+ always uses d_model
         self.gate = InstructionContextGate(GateConfig(
@@ -190,9 +202,8 @@ class DualEncoderCodeT5(nn.Module):
         del base
         torch.cuda.empty_cache()
 
-        # Gate initialization: zeros -> sigmoid(0) = 0.5 (neutral start).
-        # With symmetry broken, the gate now receives selective gradient
-        # signal from epoch 1 and will converge to ~0.25-0.35.
+        # Gate initialization: tanh(0) = 0.0 (closed at start).
+        # Decoder sees in-distribution memory at step 0, then context is added gradually.
         nn.init.zeros_(self.gate.gates)
 
     def _encode_instruction(

@@ -64,11 +64,13 @@ def set_seed(seed: int):
         torch.cuda.manual_seed_all(seed)
 
 
-def get_lr(step: int, warmup_steps: int, base_lr: float) -> float:
+def get_lr(step: int, warmup_steps: int, total_steps: int, base_lr: float) -> float:
     """Linear warmup then cosine decay."""
     if step < warmup_steps:
         return base_lr * step / max(warmup_steps, 1)
-    return base_lr * 0.5 * (1 + math.cos(math.pi * (step - warmup_steps) / max(step, 1)))
+    progress = (step - warmup_steps) / max(total_steps - warmup_steps, 1)
+    progress = max(0.0, min(1.0, progress))
+    return base_lr * 0.5 * (1 + math.cos(math.pi * progress))
 
 
 def compute_loss(
@@ -239,8 +241,13 @@ def train(args):
             }
 
             global_step += 1
-            lr = get_lr(global_step, args.warmup_steps, args.lr)
-            decoder_lr = get_lr(global_step, args.warmup_steps, args.lr * args.decoder_lr_factor)
+            lr = get_lr(global_step, args.warmup_steps, total_steps, args.lr)
+            decoder_lr = get_lr(
+                global_step,
+                args.warmup_steps,
+                total_steps,
+                args.lr * args.decoder_lr_factor,
+            )
 
             # Update encoder optimizer (index 0) with cosine-decayed LR
             for pg in optimizers[0].param_groups:
@@ -326,10 +333,10 @@ def train(args):
         # Gate health diagnostic after epoch 3
         # Prints a clear verdict so you can stop early if the gate is frozen
         if epoch == 3 and args.model == "dual" and gate_log:
-            gate_movement = max(abs(g - 0.5) for g in avg_gates)
+            gate_movement = max(abs(g - 0.0) for g in avg_gates)
             print(f"  Gate values: {[f'{g:.4f}' for g in avg_gates]}")
-            print(f"  Max deviation from 0.5: {gate_movement:.4f}")
-            if gate_movement > 0.005:
+            print(f"  Max deviation from 0.0: {gate_movement:.4f}")
+            if gate_movement > 0.01:
                 print(f"  VERDICT: HEALTHY -- gate is moving, continue training")
             else:
                 print(f"  VERDICT: FROZEN -- gate not moving, stop and investigate")
